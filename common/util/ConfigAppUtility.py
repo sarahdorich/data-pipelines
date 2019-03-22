@@ -4,7 +4,7 @@
 
 import configparser
 
-APP_CONFIG_FILE = "Util/app_config.ini"
+APP_CONFIG_FILE = "config/app_config.ini"
 
 
 class ConfigAppUtility():

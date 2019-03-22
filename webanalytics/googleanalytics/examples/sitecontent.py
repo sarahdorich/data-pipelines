@@ -4,15 +4,16 @@
 
 """
 
-from data-pipelines.web-analytics.google-analytics.examples.ietl import IEtl
-from DataPipeline.Tools.FeatureExtractors import extract_customer_id_from_social_selling_page_path, \
-    extract_product_id_from_page_path, extract_share_list_id_from_social_selling_page_path, \
-    get_page_path_levels, extract_page_path_level_n, extract_source_medium
-from DataPipeline.Tools.GoogleAnalyticsColumnRenamer import update_spark_df_column_names, update_column_names
+from webanalytics.googleanalytics.examples.ietl import IEtl
+from webanalytics.googleanalytics.examples.tools.FeatureExtractors import get_page_path_levels, \
+    extract_page_path_level_n, extract_source_medium
+from webanalytics.googleanalytics.examples.tools.GoogleAnalyticsColumnRenamer import update_spark_df_column_names, \
+    update_column_names
 
 import inspect
 import pandas as pd
 import numpy as np
+
 
 DESCRIPTIONFORS3KEY = "daily_site_content"
 
@@ -35,7 +36,7 @@ class DailySiteContent(IEtl):
                          end_date=end_date,
                          logger=logger)
         # Set values for S3 bucket key
-        self.s3_bucket_key = self.get_s3_key(DESCRIPTIONFORS3KEY, self.data_sink.create_datetime)
+        self.s3_bucket_key = self.get_s3_key(DESCRIPTIONFORS3KEY)
 
     def extract(self):
         metrics_names_cs_list1 = 'ga:pageviews,ga:uniquePageviews,ga:timeOnPage,ga:avgTimeOnPage,ga:entrances,ga:bounceRate,ga:exitRate,ga:pageValue'
@@ -43,7 +44,7 @@ class DailySiteContent(IEtl):
         dimension_filters_dict = None
 
         log_msg = """
-                    method='DataPipeline.sitecontent.DailySiteContent.{method}'
+                    method='webanalytics.googleanalytics.examples.sitecontent.DailySiteContent.{method}'
                     message='Getting 1st set of site content summary data'
                     metrics_names_cs_list='{metrics_names}'
                     dimensions_names_cs_list='{dimensions_names}'
@@ -61,7 +62,7 @@ class DailySiteContent(IEtl):
                                                                             dimension_filters_dict)
         metrics_names_cs_list2 = 'ga:entranceRate,ga:pageviewsPerSession,ga:exits,ga:avgSessionDuration,ga:sessions'
         log_msg = """
-                    method='DataPipeline.sitecontent.DailySiteContent.{method}'
+                    method='webanalytics.googleanalytics.examples.sitecontent.DailySiteContent.{method}'
                     message='Getting 2nd set of site content summary data'
                     metrics_names_cs_list='{metrics_names}'
                     dimensions_names_cs_list='{dimensions_names}'
@@ -77,23 +78,31 @@ class DailySiteContent(IEtl):
                                                                             metrics_names_cs_list2,
                                                                             dimensions_names_cs_list,
                                                                             dimension_filters_dict)
-        data_df = pd.merge(data_df1, data_df2,
-                           on=['ga:date',
-                               'ga:sourceMedium',
-                               'ga:country',
-                               'ga:landingPagePath',
-                               'ga:hostname',
-                               'ga:pagePath',
-                               'ga:previousPagePath',
-                               'ga:pageDepth',
-                               'ga:exitPagePath'],
-                           how='outer')
+        if data_df1.empty or data_df2.empty:
+            log_msg = """
+                        method='webanalytics.googleanalytics.examples.sitecontent.DailySiteContent.{method}'
+                        message='Not merging daily site content data because at least one of the responses is empty'
+                        """.format(method=inspect.stack()[0][3])
+            self.logger.log(self.logger.WARN, log_msg)
+            data_df = data_df1
+        else:
+            data_df = pd.merge(data_df1, data_df2,
+                               on=['ga:date',
+                                   'ga:sourceMedium',
+                                   'ga:country',
+                                   'ga:landingPagePath',
+                                   'ga:hostname',
+                                   'ga:pagePath',
+                                   'ga:previousPagePath',
+                                   'ga:pageDepth',
+                                   'ga:exitPagePath'],
+                               how='outer')
         return data_df
 
     def transform(self, response):
         if response.empty:
             log_msg = """
-                        method='DataPipeline.sitecontent.DailySiteContent.{method}'
+                        method='webanalytics.googleanalytics.examples.sitecontent.DailySiteContent.{method}'
                         message='Not transforming daily site content data because response is empty'
                         """.format(method=inspect.stack()[0][3])
             self.logger.log(self.logger.WARN, log_msg)
@@ -209,205 +218,26 @@ class DailySiteContent(IEtl):
         return transformed_response
 
     def load(self, transformed_response):
-        log_msg = """
-                    method='DataPipeline.sitecontent.DailySiteContent.{method}'
-                    message='Uploading daily site content summary data'
-                    key={key}
-                    """.format(method=inspect.stack()[0][3],
-                               key=self.s3_bucket_key)
-        self.logger.log(self.logger.INFO, log_msg)
-        self.data_sink.pandas_to_s3_parquet(transformed_response, self.s3_bucket_key)
-        log_msg = """
-                    method='DataPipeline.sitecontent.DailySiteContent.{method}'
-                    message='Successfully uploaded daily site content summary data'
-                    key={key}
-                    """.format(method=inspect.stack()[0][3],
-                               key=self.s3_bucket_key)
-        self.logger.log(self.logger.INFO, log_msg)
-
-
-class DailySiteContentSocialSelling(IEtl):
-    """Move site content data for social selling
-
-    TODO: Currently this takes data directly from GA then inserts into SQL Server.
-        In the future, this will get data from site content data in S3 buckets and put it into SQL Server.
-
-    """
-
-    def __init__(self,
-                 ga_api_obj,
-                 db,
-                 ga_view_id,
-                 start_date,
-                 end_date,
-                 logger):
-        # Initialize class variables
-        super().__init__(data_source=ga_api_obj,
-                         data_sink=db,
-                         ga_view_id=ga_view_id,
-                         start_date=start_date,
-                         end_date=end_date,
-                         logger=logger)
-
-    def extract(self):
-        """ Gets daily site content summary data for social selling from GA
-
-        Args:
-
-        Returns:
-            data_df: (pandas.DataFrame) dataframe with results from GA
-        """
-        metrics_names_cs_list1 = 'ga:pageviews,ga:uniquePageviews,ga:timeOnPage,ga:avgTimeOnPage,ga:entrances,ga:bounceRate,ga:exitRate,ga:pageValue'
-        dimensions_names_cs_list = 'ga:date,ga:country,ga:pagePath,ga:hostname,ga:landingPagePath,ga:exitPagePath'
-        # Filter only social selling page paths
-        dimension_filters_dict = {"ga:pagePath": ["PHX-URL", "PHX-FB"]}
-
-        log_msg = """
-                    method='DataPipeline.sitecontent.DailySiteContentSocialSelling.{method}'
-                    message='Getting 1st set of site content summary data for social selling'
-                    metrics_names_cs_list='{metrics_names}'
-                    dimensions_names_cs_list='{dimensions_names}'
-                    start_date='{s_date}'
-                    end_date='{e_date}'
-                    """.format(method=inspect.stack()[0][3],
-                               metrics_names=metrics_names_cs_list1,
-                               dimensions_names=dimensions_names_cs_list,
-                               s_date=self.start_date,
-                               e_date=self.end_date)
-        self.logger.log(self.logger.INFO, log_msg)
-        (reports_dict1, data_df1) = self.data_source.query_reporting_api_v4(self.start_date, self.end_date,
-                                                                            metrics_names_cs_list1,
-                                                                            dimensions_names_cs_list,
-                                                                            dimension_filters_dict)
-        metrics_names_cs_list2 = 'ga:entranceRate,ga:pageviewsPerSession,ga:exits'
-        log_msg = """
-                    method='DataPipeline.sitecontent.DailySiteContentSocialSelling.{method}'
-                    message='Getting 2nd set of site content summary data for social selling'
-                    metrics_names_cs_list='{metrics_names}'
-                    dimensions_names_cs_list='{dimensions_names}'
-                    start_date='{s_date}'
-                    end_date='{e_date}'
-                    """.format(method=inspect.stack()[0][3],
-                               metrics_names=metrics_names_cs_list2,
-                               dimensions_names=dimensions_names_cs_list,
-                               s_date=self.start_date,
-                               e_date=self.end_date)
-        self.logger.log(self.logger.INFO, log_msg)
-        (reports_dict2, data_df2) = self.data_source.query_reporting_api_v4(self.start_date, self.end_date,
-                                                                            metrics_names_cs_list2,
-                                                                            dimensions_names_cs_list,
-                                                                            dimension_filters_dict)
-        if data_df1.empty:
-            self.logger.log(self.logger.WARN, "message='data_df1 is empty!'")
-            data_df = data_df1
-        elif data_df2.empty:
-            self.logger.log(self.logger.WARN, "message='data_df2 is empty!'")
-            data_df = data_df1
-        else:
-            data_df = pd.merge(data_df1, data_df2, on=['ga:date', 'ga:country', 'ga:pagePath', 'ga:hostname', 'ga:landingPagePath', 'ga:exitPagePath'], how='outer')
-
-        return data_df
-
-    def transform(self, response):
-        if response.empty:
-            log_msg = """
-                        method='DataPipeline.sitecontent.DailySiteContentSocialSelling.{method}'
-                        message='Not transforming daily site content summary data because response is empty'
-                        """.format(method=inspect.stack()[0][3])
-            self.logger.log(self.logger.WARN, log_msg)
-            transformed_response = None
-        else:
-            # Extract language, customer_id, product_id and product_root_id from ga:pagePath
-            # Add them as new columns to the output dataframe
-            page_path_series = response['ga:pagePath']
-            language = []
-            customer_id = []
-            product_id = []
-            product_root_id = []
-            share_list_id = []
-            for val in page_path_series:
-                (product_id_val, root_product_id_val) = extract_product_id_from_page_path(val)
-                customer_id_val = extract_customer_id_from_social_selling_page_path(val)
-                share_list_id_val = extract_share_list_id_from_social_selling_page_path(val)
-
-                language.append(None)
-                customer_id.append(customer_id_val)
-                product_id.append(product_id_val)
-                product_root_id.append(root_product_id_val)
-                share_list_id.append(share_list_id_val)
-
-            response = response.assign(language=language,
-                                       customer_id=customer_id,
-                                       product_id=product_id,
-                                       product_root_id=product_root_id,
-                                       share_list_id=share_list_id)
-
-            # Prepare a DataFrame for loading into a staging table
-            num_rows = response.shape[0]
-            data_tuples = list(zip([self.ga_view_id] * num_rows,
-                                   response['ga:date'],
-                                   response['ga:country'],
-                                   response['ga:pagePath'],
-                                   response['ga:hostname'],
-                                   response['ga:landingPagePath'],
-                                   response['ga:exitPagePath'],
-                                   response['language'],
-                                   response['customer_id'],
-                                   response['product_id'],
-                                   response['product_root_id'],
-                                   response['ga:pageviews'],
-                                   response['ga:uniquePageviews'],
-                                   response['ga:timeOnPage'],
-                                   response['ga:avgTimeOnPage'],
-                                   response['ga:entrances'],
-                                   response['ga:bounceRate'],
-                                   response['ga:exitRate'],
-                                   response['ga:pageValue'],
-                                   response['ga:entranceRate'],
-                                   response['ga:pageviewsPerSession'],
-                                   response['ga:exits'],
-                                   response['share_list_id']
-                                   ))
-            transformed_response = pd.DataFrame(data_tuples)
-
-        return transformed_response
-
-    def load(self, transformed_response):
         if transformed_response is not None:
             log_msg = """
-                        method='DataPipeline.sitecontent.DailySiteContentSocialSelling.{method}'
+                        method='webanalytics.googleanalytics.examples.sitecontent.DailySiteContent.{method}'
                         message='Uploading daily site content summary data'
-                        """.format(method=inspect.stack()[0][3])
+                        key={key}
+                        """.format(method=inspect.stack()[0][3],
+                                   key=self.s3_bucket_key)
             self.logger.log(self.logger.INFO, log_msg)
-
-            # Load staging_table_df into a staging table
-            staging_table_name = "StagingDailySiteContentSocialSellingSummary"
-            self.data_sink.truncate_table(staging_table_name)
-            self.data_sink.save_dataframe_to_table(transformed_response, staging_table_name)
-
-            # Merge Country dimension
-            self.data_sink.execute_nonquery("EXEC [dbo].[MergeCountry]")
-            self.data_sink.execute_nonquery("EXEC [dbo].[MergeCountryMap]")
-
-            # Merge from a staging table into a cleaned up table
-            query_str = "{{call [dbo].[MergeDailySiteContentSocialSellingSummary] ('{0}', '{1}')}}".format(
-                self.start_date, self.end_date)
-            self.data_sink.execute_nonquery(query_str)
-
-            # Merge summary tables for reporting
-            query_str = "{{call [dbo].[MergeWeeklySocialSellingProductMetricsReport] ('{0}', '{1}')}}".format(
-                self.start_date, self.end_date)
-            self.data_sink.execute_nonquery(query_str)
-
+            self.data_sink.pandas_to_s3_parquet(transformed_response, self.s3_bucket_key)
             log_msg = """
-                        method='DataPipeline.sitecontent.DailySiteContentSocialSelling.{method}'
-                        message='Successfully uploaded daily site content social selling summary data'
-                        """.format(method=inspect.stack()[0][3])
+                        method='webanalytics.googleanalytics.examples.sitecontent.DailySiteContent.{method}'
+                        message='Successfully uploaded daily site content summary data'
+                        key={key}
+                        """.format(method=inspect.stack()[0][3],
+                                   key=self.s3_bucket_key)
             self.logger.log(self.logger.INFO, log_msg)
         else:
             log_msg = """
-                        method='DataPipeline.sitecontent.DailySiteContentSocialSelling.{method}'
-                        message='Not uploading daily site content summary data because response is None'
+                        method='webanalytics.googleanalytics.examples.sitecontent.DailySiteContent.{method}'
+                        message='Not uploading daily site content data because response is empty'
                         """.format(method=inspect.stack()[0][3])
             self.logger.log(self.logger.WARN, log_msg)
 
@@ -429,7 +259,7 @@ class DailySiteContentPagePathSummary(IEtl):
                          end_date=end_date,
                          logger=logger)
         # Set values for S3 bucket key
-        self.s3_bucket_key = self.get_s3_key(DESCRIPTIONFORS3KEY, self.data_source.s3_bucket.create_datetime)
+        self.s3_bucket_key = self.get_s3_key(DESCRIPTIONFORS3KEY)
 
     def extract(self):
         df = self.data_source.get_spark_df(self.s3_bucket_key)
@@ -458,7 +288,7 @@ class DailySiteContentPagePathSummary(IEtl):
     def load(self, transformed_response):
         if transformed_response is not None:
             log_msg = """
-                        method='DataPipeline.sitecontent.DailySiteContentPagePathSummary.{method}'
+                        method='webanalytics.googleanalytics.examples.sitecontent.DailySiteContentPagePathSummary.{method}'
                         message='Uploading daily site content page path summary data'
                         """.format(method=inspect.stack()[0][3])
             self.logger.log(self.logger.INFO, log_msg)
@@ -468,13 +298,13 @@ class DailySiteContentPagePathSummary(IEtl):
             self.data_sink.save_dataframe_to_table(transformed_response, staging_table_name)
 
             log_msg = """
-                        method='DataPipeline.sitecontent.DailySiteContentPagePathSummary.{method}'
+                        method='webanalytics.googleanalytics.examples.sitecontent.DailySiteContentPagePathSummary.{method}'
                         message='Successfully uploaded daily site content page path summary data'
                         """.format(method=inspect.stack()[0][3])
             self.logger.log(self.logger.INFO, log_msg)
         else:
             log_msg = """
-                        method='DataPipeline.sitecontent.DailySiteContentPagePathSummary.{method}'
+                        method='webanalytics.googleanalytics.examples.sitecontent.DailySiteContentPagePathSummary.{method}'
                         message='Not uploading daily site content page path summary data because response is None'
                         """.format(method=inspect.stack()[0][3])
             self.logger.log(self.logger.WARN, log_msg)

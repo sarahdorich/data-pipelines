@@ -9,7 +9,7 @@ It uses Python's standard logging class and initializes a logger object for your
 
 """
 
-from usanapy.Util.OSHelpers import get_log_filepath
+from common.util.OSHelpers import get_log_filepath
 
 import logging
 import re

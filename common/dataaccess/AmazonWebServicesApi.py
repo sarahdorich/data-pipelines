@@ -4,10 +4,10 @@
 
 """
 
-from Util.Logging import Logging
-from Util.OSHelpers import get_log_filepath
-from Util.ListMethods import is_in
-from Util.DateTimeMethods import get_curr_datetime_str
+from common.util.Logging import Logging
+from common.util.OSHelpers import get_log_filepath
+from common.util.ListMethods import is_in
+from common.util.DateTimeMethods import get_curr_datetime_str
 
 import boto3
 import logging
@@ -16,8 +16,6 @@ import pandas as pd
 import gzip
 from boto3.s3.transfer import TransferConfig
 import re
-#import s3fs
-#import pyarrow.parquet as pq
 
 
 class AwsInitializer:

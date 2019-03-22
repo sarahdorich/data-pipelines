@@ -7,8 +7,8 @@ Uses the Tongji API to access data from Baidu Analytics. The following APIs are 
 
 """
 
-from usanapy.Util.Logging import check_logger
-from usanapy.Util.ListMethods import is_in
+from common.util.Logging import check_logger
+from common.util.ListMethods import is_in
 
 import inspect
 import json
@@ -39,7 +39,7 @@ class BaiduAnalytics:
                 To get your token, use an admin account in Baidu Analytics.
                 In Baidu Analytics (translated page), go to Management > Other settings > Data export service.
                 Accept and open it and the token will display on the screen.
-            logger (usanapy.Util.Logging.Logging): logger
+            logger (common.util.Logging.Logging): logger
         """
         self.site_id = site_id
         self.username = username

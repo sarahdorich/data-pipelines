@@ -6,14 +6,13 @@ Contains a class used for connecting and interacting with a SQL Server database.
 
 """
 
-from usanapy.Util.Logging import Logging
-from usanapy.Util.OSHelpers import get_log_filepath
+from common.util.Logging import Logging
+from common.util.OSHelpers import get_log_filepath
 
 import pandas
 import urllib
 import pyodbc
 import sqlalchemy
-from sqlalchemy import MetaData
 from sqlalchemy.ext.automap import automap_base
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker

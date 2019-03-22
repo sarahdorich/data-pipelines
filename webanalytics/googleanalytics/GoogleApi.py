@@ -105,7 +105,7 @@ class GoogleAnalytics:
     MAXMETRICS = 10  # GA API v4 will only allow you to pull 10 metrics in one report
     MAXDIMENSIONS = 9  # GA API v4 will only allow you to pull 7 dimensions in one report
 
-    def __init__(self, account_name=None, property_name=None, profile_name=None, logging_obj=None):
+    def __init__(self, account_name=None, property_name=None, profile_name=None, ga_settings=None, logging_obj=None):
         """ Create a GoogleAnalytics object
 
         Initializes a GoogleAnalytics object,
@@ -113,9 +113,10 @@ class GoogleAnalytics:
         and sets the profile ID if account_name, property_name and profile_name are provided.
 
         Args:
-            account_name: (str) name of the GA account
-            property_name: (str) name of the GA property on the GA account
-            profile_name: (str) name of the GA profile on the GA property of the GA account
+            account_name (str): name of the GA account
+            property_name (str): name of the GA property on the GA account
+            profile_name (str): name of the GA profile on the GA property of the GA account
+            ga_settings (dict): settings for Google Analytics
             logging_obj: (common.Util.Logging.Logging) initialized logging object
 
         Example:
@@ -128,7 +129,8 @@ class GoogleAnalytics:
             logging_obj = Logging(name=__name__, log_filename=log_filename, log_level_str='INFO')
         self.logging_obj = logging_obj
         config_app_util = ConfigAppUtility()
-        ga_settings = config_app_util.get_settings_dict('GA')
+        if ga_settings is None:
+            ga_settings = config_app_util.get_settings_dict('GA')
         self.service_old = init('analytics', 'v3', ga_settings)
         self.service = init('analytics', 'v4', ga_settings)
         self.profile_id = None
@@ -426,7 +428,7 @@ class GoogleAnalytics:
                 is_max_returned_rows = False
             i = i + 1
 
-        return (reports_dict, data_df)
+        return reports_dict, data_df
 
     def api_response_to_dataframe_v4(self, response):
         """ Convert a GA API v4 response to a dataframe
